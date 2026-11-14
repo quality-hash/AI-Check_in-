@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เช็คชื่อคลาส Claude AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="xlsx.full.min.js"></script>
+<script>window.XLSX||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>')</script>
+<style>
+/* Layout: single-column roster sheet; summary tiles above, roster rows below, dialogs for signing and import. Light-only by design (white + green). */
+:root{
+  --paper:#ffffff;
+  --mist:#f2f8f4;
+  --leaf:#1f9d63;
+  --forest:#0d5a3c;
+  --sprout:#c9ecd7;
+  --ink:#16271f;
+  --muted:#5f7569;
+  --line:#dcebe2;
+  --amber:#c27a12;
+  --amber-bg:#fff4e0;
+  --rose:#b6413b;
+  --rose-bg:#fdecea;
+  --font-display:"Bai Jamjuree","IBM Plex Sans Thai",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans Thai","Noto Sans Thai",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--mist);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--leaf);outline-offset:2px;border-radius:8px}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px 56px}
+
+/* Header */
+header.top{background:linear-gradient(135deg,var(--forest) 0%,#137a4f 55%,var(--leaf) 100%);color:#fff;position:relative;overflow:hidden}
+header.top::after{content:"";position:absolute;right:-80px;top:-90px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(201,236,215,.35),rgba(201,236,215,0) 70%);pointer-events:none}
+.top-inner{max-width:1040px;margin:0 auto;padding:28px 20px 76px;display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;justify-content:space-between;position:relative;z-index:1}
+.eyebrow{font-size:13px;letter-spacing:.06em;opacity:.85;margin:0 0 4px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,4.4vw,40px);line-height:1.15;margin:0;text-wrap:balance}
+.sub{margin:6px 0 0;opacity:.9}
+.clock{text-align:right}
+.clock .time{font-family:var(--font-display);font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.clock .date{opacity:.9;font-size:14px;margin-top:4px}
+
+/* Summary */
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:-52px;position:relative;z-index:2}
+.tile{background:var(--paper);border-radius:16px;padding:16px 18px;box-shadow:0 6px 20px rgba(13,90,60,.08);border:1px solid var(--line)}
+.tile .k{color:var(--muted);font-size:13px}
+.tile .v{font-family:var(--font-display);font-size:32px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile.ok .v{color:var(--leaf)}
+.tile.late .v{color:var(--amber)}
+.tile.absent .v{color:var(--muted)}
+.bar{height:6px;background:var(--sprout);border-radius:99px;margin-top:10px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--leaf);border-radius:99px;transition:width .4s ease}
+
+/* Toolbar */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:22px 0 12px}
+.search{flex:1 1 240px;position:relative}
+.search input{width:100%;padding:11px 14px 11px 40px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.field{display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:6px 10px}
+.field label{font-size:13px;color:var(--muted);white-space:nowrap}
+.field input,.field select{border:0;background:transparent;padding:4px 2px;font-variant-numeric:tabular-nums}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--paper);padding:7px 13px;border-radius:99px;cursor:pointer;font-size:14px}
+.chip[aria-pressed="true"]{background:var(--forest);color:#fff;border-color:var(--forest)}
+
+.btn{border:1px solid var(--line);background:var(--paper);padding:9px 15px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--leaf);color:var(--forest)}
+.btn.primary{background:var(--leaf);border-color:var(--leaf);color:#fff}
+.btn.primary:hover{background:var(--forest);border-color:var(--forest);color:#fff}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--rose)}
+.btn.danger:hover{border-color:var(--rose);color:var(--rose)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:6px 11px;font-size:13px;border-radius:10px}
+
+/* Roster */
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel-head h2{font-family:var(--font-display);font-size:19px;margin:0;font-weight:600}
+.panel-head .actions{display:flex;gap:8px;flex-wrap:wrap}
+.row{display:grid;grid-template-columns:44px 1fr 150px 120px auto;gap:14px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);border-left:4px solid transparent}
+.row:last-child{border-bottom:0}
+.row.is-in{border-left-color:var(--leaf);background:linear-gradient(90deg,rgba(201,236,215,.35),rgba(255,255,255,0) 40%)}
+.row.is-late{border-left-color:var(--amber)}
+.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-weight:600;background:var(--sprout);color:var(--forest);font-size:16px}
+.row.is-in .avatar{background:var(--leaf);color:#fff}
+.who .name{font-weight:600;font-size:16px;overflow-wrap:anywhere}
+.who .meta{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.when{font-variant-numeric:tabular-nums}
+.when .t{font-family:var(--font-display);font-weight:600;font-size:18px}
+.when .d{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:500}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:#e3f6ec;color:var(--forest)}
+.pill.late{background:var(--amber-bg);color:var(--amber)}
+.pill.wait{background:#eef2ef;color:var(--muted)}
+.sig-thumb{width:120px;height:44px;border:1px dashed var(--line);border-radius:10px;background:#fbfdfc;display:grid;place-items:center;cursor:pointer;padding:2px}
+.sig-thumb img{max-width:100%;max-height:100%}
+.sig-thumb.empty{cursor:default;color:var(--muted);font-size:12px}
+.row-act{display:flex;gap:6px;justify-content:flex-end}
+.empty-state{padding:44px 20px;text-align:center;color:var(--muted)}
+.empty-state strong{display:block;color:var(--ink);font-family:var(--font-display);font-size:18px;margin-bottom:6px}
+.note{font-size:13px;color:var(--muted);padding:10px 18px;background:#fbfdfc;border-top:1px solid var(--line)}
+.banner{margin:14px 0 0;padding:10px 14px;border-radius:12px;background:var(--amber-bg);color:#7a4c08;font-size:14px;display:none}
+.banner.show{display:block}
+
+/* Dialogs */
+dialog{border:0;border-radius:20px;padding:0;max-width:min(640px,calc(100vw - 32px));width:100%;box-shadow:0 30px 80px rgba(13,40,28,.3);color:var(--ink)}
+dialog::backdrop{background:rgba(10,40,26,.45);backdrop-filter:blur(2px)}
+.dlg-head{padding:20px 22px 6px}
+.dlg-head h3{font-family:var(--font-display);font-size:22px;margin:0}
+.dlg-head p{margin:4px 0 0;color:var(--muted)}
+.dlg-body{padding:12px 22px}
+.dlg-foot{padding:12px 22px 20px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.dlg-foot .right{display:flex;gap:8px;margin-left:auto}
+.stamp{display:flex;align-items:center;gap:12px;background:var(--mist);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:12px}
+.stamp .big{font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--forest);font-variant-numeric:tabular-nums}
+.pad-wrap{position:relative;border:2px dashed var(--sprout);border-radius:16px;background:#fff;touch-action:none}
+.pad-wrap canvas{display:block;width:100%;height:220px;border-radius:14px;cursor:crosshair}
+.pad-hint{position:absolute;inset:auto 0 14px 0;text-align:center;color:#b5c9bd;pointer-events:none;font-size:14px}
+.pad-line{position:absolute;left:24px;right:24px;bottom:44px;border-bottom:1px solid var(--line);pointer-events:none}
+.err{color:var(--rose);font-size:14px;min-height:20px;margin-top:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.inp{display:flex;flex-direction:column;gap:4px}
+.inp label{font-size:13px;color:var(--muted)}
+.inp input{border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.drop{border:2px dashed var(--sprout);border-radius:16px;padding:26px;text-align:center;background:var(--mist);cursor:pointer}
+.drop.over{border-color:var(--leaf);background:#e3f6ec}
+.drop strong{display:block;font-family:var(--font-display);font-size:17px;color:var(--forest)}
+.preview{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:12px}
+.preview table{border-collapse:collapse;width:100%;font-size:14px}
+.preview th,.preview td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+.preview th{background:var(--mist);position:sticky;top:0;font-weight:600}
+.radio{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:14px}
+.big-sig{width:100%;background:#fff;border:1px solid var(--line);border-radius:14px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--forest);color:#fff;padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);opacity:0;transition:.25s;pointer-events:none;z-index:50;max-width:calc(100vw - 32px)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media (max-width:760px){
+  .summary{grid-template-columns:repeat(2,1fr)}
+  .row{grid-template-columns:40px 1fr auto;grid-template-areas:"av who act" "av when sig"}
+  .row .avatar{grid-area:av;width:40px;height:40px}
+  .row .who{grid-area:who}
+  .row .when{grid-area:when}
+  .row .sigcell{grid-area:sig;justify-self:end}
+  .row .row-act{grid-area:act}
+  .clock{text-align:left}
+  .grid2{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <p class="eyebrow">ATTENDANCE · ลงชื่อเข้าเรียน</p>
+      <h1 id="title">คลาส Claude AI</h1>
+      <p class="sub" id="subline">เริ่มเรียน 09:00 น.</p>
+    </div>
+    <div class="clock" aria-live="off">
+      <div class="time" id="clock">--:--:--</div>
+      <div class="date" id="today">&nbsp;</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="summary" aria-label="สรุปการเข้าเรียน">
+    <div class="tile"><div class="k">ผู้เรียนทั้งหมด</div><div class="v" id="sTotal">0</div></div>
+    <div class="tile ok"><div class="k">ลงชื่อแล้ว</div><div class="v" id="sIn">0</div><div class="bar"><span id="sBar" style="width:0%"></span></div></div>
+    <div class="tile late"><div class="k">มาสาย</div><div class="v" id="sLate">0</div></div>
+    <div class="tile absent"><div class="k">ยังไม่มา</div><div class="v" id="sOut">0</div></div>
+  </section>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="ค้นหาชื่อ รหัส หรือกลุ่ม" aria-label="ค้นหาผู้เรียน">
+    </div>
+    <div class="field"><label for="sessionDate">วันที่เรียน</label><input id="sessionDate" type="date"></div>
+    <div class="chips" role="group" aria-label="กรองสถานะ">
+      <button class="chip" data-f="all" aria-pressed="true">ทั้งหมด</button>
+      <button class="chip" data-f="out" aria-pressed="false">ยังไม่มา</button>
+      <button class="chip" data-f="in" aria-pressed="false">ลงชื่อแล้ว</button>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>รายชื่อผู้เรียน</h2>
+      <div class="actions">
+        <button class="btn sm editor-only" id="btnImport" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>นำเข้า CSV / Excel</button>
+        <button class="btn sm editor-only" id="btnAdd" type="button">+ เพิ่มชื่อ</button>
+        <button class="btn sm" id="btnCopy" type="button">คัดลอกไป Google Sheets</button>
+        <button class="btn sm" id="btnCsv" type="button" hidden>ดาวน์โหลด CSV</button>
+        <button class="btn sm editor-only" id="btnSettings" type="button">ตั้งค่า</button>
+      </div>
+    </div>
+    <div id="list" aria-live="polite"><div class="empty-state"><strong>กำลังโหลดรายชื่อ…</strong></div></div>
+    <div class="note" id="note">กด “ลงชื่อ” ที่ชื่อของคุณ เซ็นชื่อ แล้วกดยืนยัน ระบบจะบันทึกเวลาให้อัตโนมัติ</div>
+  </section>
+</main>
+
+<!-- Sign dialog -->
+<dialog id="dlgSign" aria-labelledby="signTitle">
+  <form method="dialog" id="signForm">
+    <div class="dlg-head"><h3 id="signTitle">ลงชื่อเข้าเรียน</h3><p id="signWho"></p></div>
+    <div class="dlg-body">
+      <div class="stamp">
+        <div><div style="font-size:13px;color:var(--muted)">เวลาที่จะบันทึก</div><div class="big" id="signTime">--:--</div></div>
+        <span class="pill ok" id="signPill" style="margin-left:auto">ตรงเวลา</span>
+      </div>
+      <div class="pad-wrap"><canvas id="pad" aria-label="พื้นที่เซ็นชื่อ"></canvas><div class="pad-line"></div><div class="pad-hint" id="padHint">เซ็นชื่อในกรอบนี้</div></div>
+      <div class="err" id="signErr"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" id="padClear">ล้างลายเซ็น</button>
+      <div class="right">
+        <button class="btn" value="cancel" type="submit" formnovalidate>ยกเลิก</button>
+        <button class="btn primary" type="button" id="signOk">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>ยืนยันการเข้าเรียน</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- View signature -->
+<dialog id="dlgView" aria-labelledby="viewTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="viewTitle">ลายเซ็น</h3><p id="viewMeta"></p></div>
+    <div class="dlg-body"><img id="viewImg" class="big-sig" alt="ลายเซ็นผู้เรียน"></div>
+    <div class="dlg-foot"><div class="right"><button class="btn primary" type="submit">ปิด</button></div></div>
+  </form>
+</dialog>
+
+<!-- Import -->
+<dialog id="dlgImport" aria-labelledby="impTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="impTitle">นำเข้ารายชื่อผู้เรียน</h3><p>รองรับไฟล์ .csv, .xlsx, .xls ระบบจะหาคอลัมน์ ชื่อ / นามสกุล / รหัส / อีเมล / กลุ่ม ให้เอง</p></div>
+    <div class="dlg-body">
+      <label class="drop" id="drop" for="file">
+        <strong>ลากไฟล์มาวาง หรือคลิกเพื่อเลือกไฟล์</strong>
+        <span style="color:var(--muted);font-size:14px">แถวแรกควรเป็นหัวคอลัมน์ เช่น รหัส, ชื่อ, นามสกุล, กลุ่ม</span>
+      </label>
+      <input id="file" type="file" accept=".csv,.xlsx,.xls,text/csv" hidden>
+      <div id="impPreview"></div>
+      <div class="radio" id="impMode" hidden>
+        <label><input type="radio" name="mode" value="merge" checked> เพิ่มต่อจากรายชื่อเดิม</label>
+        <label><input type="radio" name="mode" value="replace"> แทนที่รายชื่อทั้งหมด</label>
+      </div>
+      <div class="err" id="impErr"></div>
+    </div>
+    <div class="dlg-foot"><div class="right">
+      <button class="btn" value="cancel" type="submit">ยกเลิก</button>
+      <button class="btn primary" type="button" id="impOk" disabled>นำเข้า</button>
+    </div></div>
+  </form>
+</dialog>
+
+<!-- Add one -->
+<dialog id="dlgAdd" aria-labelledby="addTitle">
+  <form id="addForm">
+    <div class="dlg-head"><h3 id="addTitle">เพิ่มผู้เรียน</h3></div>
+    <div class="dlg-body grid2">
+      <div class="inp" style="grid-column:1/-1"><label for="aName">ชื่อ-นามสกุล</label><input id="aName" required></div>
+      <div class="inp"><label for="aCode">รหัส / เลขที่</label><input id="aCode"></div>
+      <div class="inp"><label for="aGroup">กลุ่ม / แผนก</label><input id="aGroup"></div>
+      <div class="inp" style="grid-column:1/-1"><label for="aEmail">อีเมล</label><input id="aEmail" type="email"></div>
+    </div>
+    <div class="dlg-foot"><div class="right">
+      <button class="btn" type="button" data-close>ยกเลิก</button>
+      <button class="btn primary" type="submit">เพิ่ม</button>
+    </div></div>
+  </form>
+</dialog>
+
+<!-- Settings -->
+<dialog id="dlgSet" aria-labelledby="setTitle">
+  <form id="setForm">
+    <div class="dlg-head"><h3 id="setTitle">ตั้งค่าคลาส</h3></div>
+    <div class="dlg-body grid2">
+      <div class="inp" style="grid-column:1/-1"><label for="stName">ชื่อคลาส</label><input id="stName" required></div>
+      <div class="inp"><label for="stStart">เวลาเริ่มเรียน</label><input id="stStart" type="time" required></div>
+      <div class="inp"><label for="stLate">นับว่าสายหลังเริ่มกี่นาที</label><input id="stLate" type="number" min="0" max="240" required></div>
+      <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="color:var(--muted);font-size:14px">ลบรายชื่อทั้งหมดเพื่อเริ่มใหม่ (ประวัติการเช็คชื่อยังอยู่)</span>
+        <button class="btn sm danger" type="button" id="btnWipe">ลบรายชื่อทั้งหมด</button>
+      </div>
+    </div>
+    <div class="dlg-foot"><div class="right">
+      <button class="btn" type="button" data-close>ยกเลิก</button>
+      <button class="btn primary" type="submit">บันทึก</button>
+    </div></div>
+  </form>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="dlgConfirm" aria-labelledby="cfTitle">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="cfTitle">ยืนยัน</h3><p id="cfText"></p></div>
+    <div class="dlg-foot"><div class="right">
+      <button class="btn" value="no" type="submit">ยกเลิก</button>
+      <button class="btn primary" value="yes" type="submit" id="cfYes">ยืนยัน</button>
+    </div></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ===================== CONFIG =====================
+   googleScriptUrl : ลิงก์ Web app ของ Google Apps Script (ลงท้าย /exec) ถ้าเว้นว่าง ข้อมูลจะเก็บในเบราว์เซอร์เครื่องนั้นเท่านั้น
+   adminKey        : ถ้าใส่ ปุ่มจัดการ (นำเข้า/เพิ่ม/ลบ/ตั้งค่า/ยกเลิก) จะแสดงเฉพาะเมื่อเปิดด้วย ?admin=<รหัสนี้>
+                     (ซ่อนปุ่มเท่านั้น ไม่ใช่ระบบความปลอดภัย)
+   refreshSeconds  : ดึงข้อมูลใหม่จากชีตทุกกี่วินาที
+   ================================================== */
+const CONFIG = {
+  googleScriptUrl: "",
+  adminKey: "",
+  refreshSeconds: 15
+};
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const TZ = "Asia/Bangkok";
+const pad2 = n => String(n).padStart(2,"0");
+function bkkParts(d){
+  const f = new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"});
+  const o = {}; f.formatToParts(d).forEach(p => o[p.type]=p.value); return o;
+}
+const todayKey = () => { const p = bkkParts(new Date()); return `${p.year}-${p.month}-${p.day}`; };
+const hm = iso => { const p = bkkParts(new Date(iso)); return `${p.hour}:${p.minute}`; };
+const hms = d => { const p = bkkParts(d); return `${p.hour}:${p.minute}:${p.second}`; };
+const thDate = key => new Date(key+"T12:00:00+07:00").toLocaleDateString("th-TH",{timeZone:TZ,weekday:"long",day:"numeric",month:"long",year:"numeric"});
+
+/* ---------- state ---------- */
+const S = {
+  settings:{className:"Claude AI",startTime:"09:00",lateMin:15},
+  students:[], checkins:{}, date:todayKey(), filter:"all", q:"",
+  canEdit:true, canWrite:true, loaded:false
+};
+
+/* ---------- store adapters ---------- */
+function makeLocalStore(){
+  const KEY="claude-ai-attendance-v1"; let mem;
+  try{ mem = JSON.parse(localStorage.getItem(KEY)||"null"); }catch(e){}
+  mem = mem || {settings:null,students:{},sessions:{}};
+  const subs = new Set();
+  const save = () => { try{ localStorage.setItem(KEY,JSON.stringify(mem)); }catch(e){} subs.forEach(f=>f()); };
+  return {
+    kind:"local",
+    onSettings(cb){ const f=()=>cb(mem.settings); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
+    onStudents(cb){ const f=()=>cb(Object.entries(mem.students).map(([id,v])=>({id,...v}))); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
+    onCheckins(date,cb){ const f=()=>cb({...(mem.sessions[date]||{})}); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
+    async setSettings(v){ mem.settings=v; save(); },
+    async setStudent(id,v){ mem.students[id]=v; save(); },
+    async delStudent(id){ delete mem.students[id]; save(); },
+    async setCheckin(date,id,v){ (mem.sessions[date] ||= {})[id]=v; save(); },
+    async delCheckin(date,id){ if(mem.sessions[date]) delete mem.sessions[date][id]; save(); }
+  };
+}
+function makeDbStore(db){
+  const snapList = cb => snap => cb(snap.docs.map(d=>({id:d.id,...d.data()})), snap.metadata);
+  return {
+    kind:"db",
+    onSettings(cb,err){ return db.doc("settings/main").onSnapshot(s=>cb(s.exists?s.data():null,s.metadata),err); },
+    onStudents(cb,err){ return db.collection("students").onSnapshot(snapList(cb),err); },
+    onCheckins(date,cb,err){ return db.collection(`sessions/${date}/checkins`).onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); cb(o,s.metadata); },err); },
+    setSettings:v=>db.doc("settings/main").set(v),
+    setStudent:(id,v)=>db.doc("students/"+id).set(v),
+    delStudent:id=>db.doc("students/"+id).delete(),
+    setCheckin:(date,id,v)=>db.doc(`sessions/${date}/checkins/${id}`).set(v),
+    delCheckin:(date,id)=>db.doc(`sessions/${date}/checkins/${id}`).delete()
+  };
+}
+
+let store = null, unsubCheckins = null, loadTimer = null;
+function banner(msg){ const b=$("#banner"); b.textContent=msg||""; b.classList.toggle("show",!!msg); }
+
+function attach(st){
+  store = st;
+  st.onSettings(v=>{ if(v) S.settings={...S.settings,...v}; renderHead(); render(); }, dbErr);
+  st.onStudents((list,meta)=>{
+    S.students = list.sort((a,b)=>(a.order??1e9)-(b.order??1e9) || String(a.name).localeCompare(String(b.name),"th"));
+    if(!meta || !meta.fromCache){ S.loaded=true; clearTimeout(loadTimer); if(st.kind==="db") banner(""); }
+    render();
+  }, dbErr);
+  subscribeCheckins();
+}
+function subscribeCheckins(){
+  if(unsubCheckins) unsubCheckins();
+  S.checkins = {}; render();
+  unsubCheckins = store.onCheckins(S.date, o=>{ S.checkins=o; render(); }, dbErr);
+}
+function dbErr(e){ clearTimeout(loadTimer); banner("เชื่อมต่อฐานข้อมูลไม่ได้ ข้อมูลที่เห็นอาจไม่เป็นปัจจุบัน ลองเปิดหน้านี้ใหม่อีกครั้ง"); S.loaded=true; render(); }
+
+/* ---------- helpers ---------- */
+function lateMinutes(iso){
+  const [h,m] = S.settings.startTime.split(":").map(Number);
+  const start = new Date(`${S.date}T${pad2(h)}:${pad2(m)}:00+07:00`);
+  return Math.round((new Date(iso)-start)/60000);
+}
+const isLate = iso => lateMinutes(iso) > Number(S.settings.lateMin||0);
+const initials = n => { const t=String(n||"?").trim().replace(/^(นาย|นางสาว|นาง|น\.ส\.|Mr\.?|Ms\.?|Mrs\.?)\s*/i,""); return (t[0]||"?").toUpperCase(); };
+const slug = s => String(s).trim().replace(/[^A-Za-z0-9_\-.~:@+]/g,"-").replace(/^[.]+$/,"x").slice(0,80);
+const newId = () => "s" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2600); }
+function confirmBox(title,text,yes="ยืนยัน"){
+  return new Promise(res=>{ const d=$("#dlgConfirm"); $("#cfTitle").textContent=title; $("#cfText").textContent=text; $("#cfYes").textContent=yes;
+    d.returnValue=""; d.addEventListener("close",()=>res(d.returnValue==="yes"),{once:true}); d.showModal(); });
+}
+async function writeSafe(fn,failMsg){
+  try{ await fn(); return true; }
+  catch(e){
+    if(e && e.code==="unavailable"){ await new Promise(r=>setTimeout(r,600+Math.random()*600)); try{ await fn(); return true; }catch(e2){ e=e2; } }
+    if(e && e.code==="invalid_argument"){ S.canWrite=false; render(); toast("บัญชีนี้ไม่มีสิทธิ์บันทึกข้อมูล ขอสิทธิ์ Contributor จากเจ้าของหน้า"); }
+    else if(e && e.code==="quota_exceeded"){ toast("พื้นที่เก็บข้อมูลเต็ม ลบรายชื่อหรือข้อมูลเก่าออกก่อน"); }
+    else toast(failMsg || "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
+    return false;
+  }
+}
+
+/* ---------- render ---------- */
+function renderHead(){
+  $("#title").textContent = "คลาส " + (S.settings.className||"Claude AI");
+  $("#subline").textContent = `เริ่มเรียน ${S.settings.startTime} น. · สายหลัง ${S.settings.lateMin} นาที · ${thDate(S.date)}`;
+}
+function render(){
+  const total=S.students.length; let inC=0, lateC=0;
+  S.students.forEach(s=>{ const c=S.checkins[s.id]; if(c){ inC++; if(isLate(c.time)) lateC++; } });
+  $("#sTotal").textContent=total; $("#sIn").textContent=inC; $("#sLate").textContent=lateC; $("#sOut").textContent=total-inC;
+  $("#sBar").style.width = total ? (inC/total*100).toFixed(1)+"%" : "0%";
+  document.querySelectorAll(".editor-only").forEach(el=>el.hidden=!S.canEdit);
+
+  const list=$("#list");
+  if(!S.loaded){ return; }
+  if(!total){
+    list.innerHTML = `<div class="empty-state"><strong>ยังไม่มีรายชื่อผู้เรียน</strong>${S.canEdit?'กด “นำเข้า CSV / Excel” เพื่อเพิ่มรายชื่อทั้งคลาส หรือ “+ เพิ่มชื่อ” ทีละคน':'รอผู้สอนเพิ่มรายชื่อ'}</div>`;
+    return;
+  }
+  const q=S.q.trim().toLowerCase();
+  const rows = S.students.filter(s=>{
+    const c=S.checkins[s.id];
+    if(S.filter==="in" && !c) return false;
+    if(S.filter==="out" && c) return false;
+    if(!q) return true;
+    return [s.name,s.code,s.group,s.email].some(v=>String(v||"").toLowerCase().includes(q));
+  });
+  if(!rows.length){ list.innerHTML=`<div class="empty-state"><strong>ไม่พบรายชื่อที่ค้นหา</strong>ลองพิมพ์ชื่อหรือรหัสใหม่</div>`; return; }
+  list.innerHTML = rows.map(s=>{
+    const c=S.checkins[s.id]; const late=c && isLate(c.time); const lm=c?lateMinutes(c.time):0;
+    const meta=[s.code&&("รหัส "+s.code), s.group].filter(Boolean).map(esc).join(" · ");
+    const status = !c ? `<span class="pill wait">ยังไม่ลงชื่อ</span>`
+      : late ? `<span class="pill late">สาย ${lm} นาที</span>` : `<span class="pill ok">ตรงเวลา</span>`;
+    const sig = c && c.sig ? `<button class="sig-thumb" data-view="${esc(s.id)}" aria-label="ดูลายเซ็นของ ${esc(s.name)}"><img src="${esc(c.sig)}" alt=""></button>`
+      : `<div class="sig-thumb empty">${c?"ไม่มีลายเซ็น":"—"}</div>`;
+    const act = !c
+      ? `<button class="btn primary sm" data-sign="${esc(s.id)}" ${S.canWrite?"":"disabled"}>ลงชื่อ</button>`
+      : (S.canEdit ? `<button class="btn sm ghost danger" data-undo="${esc(s.id)}" aria-label="ยกเลิกการลงชื่อของ ${esc(s.name)}">ยกเลิก</button>` : "");
+    const del = S.canEdit ? `<button class="btn sm ghost" data-del="${esc(s.id)}" aria-label="ลบ ${esc(s.name)} ออกจากรายชื่อ" title="ลบออกจากรายชื่อ">✕</button>` : "";
+    return `<div class="row ${c?"is-in":""} ${late?"is-late":""}">
+      <div class="avatar" aria-hidden="true">${esc(initials(s.name))}</div>
+      <div class="who"><div class="name">${esc(s.name)}</div><div class="meta">${meta||"&nbsp;"}</div></div>
+      <div class="when">${c?`<div class="t">${hm(c.time)} น.</div>`:`<div class="t" style="color:var(--muted)">--:--</div>`}${status}</div>
+      <div class="sigcell">${sig}</div>
+      <div class="row-act">${act}${del}</div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- events: list ---------- */
+$("#list").addEventListener("click", async e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.sign) openSign(b.dataset.sign);
+  else if(b.dataset.view){
+    const s=S.students.find(x=>x.id===b.dataset.view), c=S.checkins[b.dataset.view]; if(!s||!c) return;
+    $("#viewTitle").textContent="ลายเซ็นของ "+s.name; $("#viewMeta").textContent=`ลงชื่อเวลา ${hm(c.time)} น. · ${thDate(S.date)}`;
+    $("#viewImg").src=c.sig; $("#dlgView").showModal();
+  }
+  else if(b.dataset.undo){
+    const s=S.students.find(x=>x.id===b.dataset.undo);
+    if(await confirmBox("ยกเลิกการลงชื่อ?",`ลบเวลาและลายเซ็นของ ${s?s.name:""} ในวันที่ ${thDate(S.date)}`,"ยกเลิกการลงชื่อ"))
+      if(await writeSafe(()=>store.delCheckin(S.date,b.dataset.undo))) toast("ยกเลิกการลงชื่อแล้ว");
+  }
+  else if(b.dataset.del){
+    const s=S.students.find(x=>x.id===b.dataset.del);
+    if(await confirmBox("ลบออกจากรายชื่อ?",`${s?s.name:""} จะหายจากรายชื่อคลาส`,"ลบ"))
+      if(await writeSafe(()=>store.delStudent(b.dataset.del))) toast("ลบรายชื่อแล้ว");
+  }
+});
+$("#q").addEventListener("input",e=>{ S.q=e.target.value; render(); });
+document.querySelectorAll(".chip").forEach(c=>c.addEventListener("click",()=>{
+  S.filter=c.dataset.f; document.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===c)); render();
+}));
+const dateInp=$("#sessionDate"); dateInp.value=S.date;
+dateInp.addEventListener("change",()=>{ if(!dateInp.value) return; S.date=dateInp.value; renderHead(); if(store) subscribeCheckins(); });
+
+/* ---------- clock ---------- */
+function tick(){ const now=new Date(); $("#clock").textContent=hms(now); $("#today").textContent=thDate(todayKey());
+  if($("#dlgSign").open) updateSignStamp(); }
+tick(); setInterval(tick,1000);
+
+/* ---------- signature pad ---------- */
+const canvas=$("#pad"), ctx=canvas.getContext("2d"); let drawing=false, hasInk=false, last=null, signFor=null;
+function sizePad(){
+  const r=canvas.getBoundingClientRect(), dpr=Math.max(1,window.devicePixelRatio||1);
+  canvas.width=Math.round(r.width*dpr); canvas.height=Math.round(r.height*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#0d3b28"; ctx.lineWidth=2.6;
+  hasInk=false; $("#padHint").hidden=false;
+}
+const pt = e => { const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top,p:e.pressure||.5}; };
+canvas.addEventListener("pointerdown",e=>{ e.preventDefault(); canvas.setPointerCapture(e.pointerId); drawing=true; last=pt(e);
+  ctx.beginPath(); ctx.arc(last.x,last.y,1.2,0,Math.PI*2); ctx.fillStyle="#0d3b28"; ctx.fill(); hasInk=true; $("#padHint").hidden=true; $("#signErr").textContent=""; });
+canvas.addEventListener("pointermove",e=>{ if(!drawing) return; e.preventDefault(); const p=pt(e);
+  ctx.lineWidth = e.pointerType==="pen" ? 1.4+p.p*2.6 : 2.6;
+  ctx.beginPath(); ctx.moveTo(last.x,last.y); const mx=(last.x+p.x)/2,my=(last.y+p.y)/2; ctx.quadraticCurveTo(last.x,last.y,mx,my); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; });
+["pointerup","pointercancel","pointerleave"].forEach(t=>canvas.addEventListener(t,()=>drawing=false));
+$("#padClear").addEventListener("click",sizePad);
+
+function updateSignStamp(){
+  const now=new Date().toISOString(); $("#signTime").textContent=hm(now)+" น.";
+  const pill=$("#signPill"); const sameDay = S.date===todayKey();
+  if(!sameDay){ pill.className="pill wait"; pill.textContent="บันทึกย้อนหลัง"; return; }
+  const lm=lateMinutes(now); if(isLate(now)){ pill.className="pill late"; pill.textContent=`สาย ${lm} นาที`; } else { pill.className="pill ok"; pill.textContent="ตรงเวลา"; }
+}
+function openSign(id){
+  const s=S.students.find(x=>x.id===id); if(!s) return; signFor=s;
+  $("#signWho").textContent = [s.name, s.code&&("รหัส "+s.code), s.group].filter(Boolean).join(" · ");
+  $("#signErr").textContent=""; updateSignStamp(); $("#dlgSign").showModal(); requestAnimationFrame(sizePad);
+}
+function exportSig(){
+  // trim to ink bounds, scale into max 560x200 PNG to keep the record small
+  const w=canvas.width,h=canvas.height, data=ctx.getImageData(0,0,w,h).data; let x0=w,y0=h,x1=0,y1=0;
+  for(let y=0;y<h;y+=2) for(let x=0;x<w;x+=2){ if(data[(y*w+x)*4+3]>10){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  if(x1<=x0||y1<=y0) return null;
+  const m=12; x0=Math.max(0,x0-m); y0=Math.max(0,y0-m); x1=Math.min(w,x1+m); y1=Math.min(h,y1+m);
+  const sw=x1-x0, sh=y1-y0, sc=Math.min(1,420/sw,150/sh);
+  const out=document.createElement("canvas"); out.width=Math.round(sw*sc); out.height=Math.round(sh*sc);
+  out.getContext("2d").drawImage(canvas,x0,y0,sw,sh,0,0,out.width,out.height);
+  return out.toDataURL("image/png");
+}
+$("#signOk").addEventListener("click", async ()=>{
+  if(!hasInk){ $("#signErr").textContent="กรุณาเซ็นชื่อก่อนกดยืนยัน"; return; }
+  const sig=exportSig(); if(!sig){ $("#signErr").textContent="กรุณาเซ็นชื่อก่อนกดยืนยัน"; return; }
+  const s=signFor, time=new Date().toISOString(), btn=$("#signOk"); btn.disabled=true;
+  const ok = await writeSafe(()=>store.setCheckin(S.date,s.id,{studentId:s.id,name:s.name,code:s.code||"",group:s.group||"",time,sig,approved:true}));
+  btn.disabled=false;
+  if(ok){ $("#dlgSign").close(); toast(`บันทึกแล้ว: ${s.name} เวลา ${hm(time)} น.`); }
+});
+
+/* ---------- import ---------- */
+let parsed=[];
+const drop=$("#drop"), fileInp=$("#file");
+$("#btnImport").addEventListener("click",()=>{ parsed=[]; $("#impPreview").innerHTML=""; $("#impErr").textContent=""; $("#impMode").hidden=true; $("#impOk").disabled=true; fileInp.value=""; $("#dlgImport").showModal(); });
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{ e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{ e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f); });
+fileInp.addEventListener("change",()=>{ if(fileInp.files[0]) readFile(fileInp.files[0]); });
+
+async function readFile(f){
+  $("#impErr").textContent="";
+  if(typeof XLSX==="undefined"){ $("#impErr").textContent="โหลดตัวอ่านไฟล์ไม่สำเร็จ ลองเปิดหน้าใหม่"; return; }
+  try{
+    let wb;
+    if(/\.csv$/i.test(f.name)||f.type==="text/csv"){ wb=XLSX.read((await f.text()).replace(/^﻿/,""),{type:"string"}); }
+    else wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:false}).filter(r=>r.some(c=>String(c).trim()));
+    parsed=mapRows(rows);
+    if(!parsed.length){ $("#impErr").textContent="ไม่พบรายชื่อในไฟล์ ตรวจว่ามีคอลัมน์ชื่ออยู่ในชีตแรก"; $("#impOk").disabled=true; $("#impPreview").innerHTML=""; return; }
+    $("#impPreview").innerHTML=`<p style="margin:12px 0 0"><b>${parsed.length}</b> รายชื่อจาก <b>${esc(f.name)}</b></p><div class="preview"><table><thead><tr><th>#</th><th>รหัส</th><th>ชื่อ</th><th>กลุ่ม</th><th>อีเมล</th></tr></thead><tbody>${
+      parsed.slice(0,200).map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.group)}</td><td>${esc(p.email)}</td></tr>`).join("")}</tbody></table></div>`;
+    $("#impMode").hidden=false; $("#impOk").disabled=false;
+  }catch(err){ $("#impErr").textContent="อ่านไฟล์ไม่ได้ ใช้ไฟล์ .csv (UTF-8) หรือ .xlsx"; }
+}
+function mapRows(rows){
+  if(!rows.length) return [];
+  const head=rows[0].map(h=>String(h).trim().toLowerCase());
+  const find=re=>head.findIndex(h=>re.test(h));
+  let iFull=find(/ชื่อ\s*-?\s*(สกุล|นามสกุล)|ชื่อ-นามสกุล|full\s*name|^name$|ชื่อผู้เรียน|ชื่อผู้เข้าอบรม/);
+  let iFirst=find(/^ชื่อ$|^ชื่อจริง|first/), iLast=find(/^นามสกุล|last|surname/);
+  const iPre=find(/คำนำหน้า|prefix|title/);
+  const iCode=find(/รหัส|^id$|student\s*id|^no\.?$|เลขที่|code|ลำดับ/);
+  const iEmail=find(/mail|อีเมล/);
+  const iGroup=find(/กลุ่ม|group|section|แผนก|ฝ่าย|department|บริษัท|company|หน่วยงาน/);
+  if(iFull<0 && iFirst<0) iFull=find(/ชื่อ|name/);
+  const hasHeader = iFull>=0||iFirst>=0;
+  const body = hasHeader?rows.slice(1):rows;
+  if(!hasHeader) iFull=0;
+  return body.map(r=>{
+    const g=i=>i>=0?String(r[i]??"").trim():"";
+    let name = iFull>=0 ? g(iFull) : [g(iFirst),g(iLast)].filter(Boolean).join(" ");
+    if(iPre>=0 && g(iPre) && !name.startsWith(g(iPre))) name=g(iPre)+name;
+    return {name, code:g(iCode), email:g(iEmail), group:g(iGroup)};
+  }).filter(p=>p.name);
+}
+$("#impOk").addEventListener("click", async ()=>{
+  const mode=document.querySelector('input[name="mode"]:checked').value, btn=$("#impOk"); btn.disabled=true;
+  if(mode==="replace"){
+    if(!(await confirmBox("แทนที่รายชื่อทั้งหมด?",`รายชื่อเดิม ${S.students.length} คนจะถูกลบ แล้วใช้รายชื่อใหม่ ${parsed.length} คนแทน`,"แทนที่"))){ btn.disabled=false; return; }
+    for(const s of S.students){ if(!(await writeSafe(()=>store.delStudent(s.id)))){ btn.disabled=false; return; } }
+  }
+  const existing=new Set(mode==="replace"?[]:S.students.map(s=>s.id));
+  let order = mode==="replace"?0:S.students.reduce((m,s)=>Math.max(m,s.order||0),0);
+  let done=0;
+  for(const p of parsed){
+    let id = p.code ? "c-"+slug(p.code) : newId();
+    if(!p.code && existing.has(id)) id=newId();
+    order++;
+    const ok=await writeSafe(()=>store.setStudent(id,{name:p.name,code:p.code,email:p.email,group:p.group,order}));
+    if(!ok) break; done++; existing.add(id);
+    btn.textContent=`กำลังนำเข้า ${done}/${parsed.length}`;
+  }
+  btn.textContent="นำเข้า"; btn.disabled=false;
+  $("#dlgImport").close(); toast(`นำเข้าแล้ว ${done} รายชื่อ`);
+});
+
+/* ---------- add / settings ---------- */
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>b.closest("dialog").close()));
+$("#btnAdd").addEventListener("click",()=>{ $("#addForm").reset(); $("#dlgAdd").showModal(); });
+$("#addForm").addEventListener("submit", async e=>{
+  e.preventDefault(); const name=$("#aName").value.trim(); if(!name) return;
+  const code=$("#aCode").value.trim(); const id=code?"c-"+slug(code):newId();
+  const order=S.students.reduce((m,s)=>Math.max(m,s.order||0),0)+1;
+  if(await writeSafe(()=>store.setStudent(id,{name,code,group:$("#aGroup").value.trim(),email:$("#aEmail").value.trim(),order}))){ $("#dlgAdd").close(); toast("เพิ่ม "+name+" แล้ว"); }
+});
+$("#btnSettings").addEventListener("click",()=>{ $("#stName").value=S.settings.className; $("#stStart").value=S.settings.startTime; $("#stLate").value=S.settings.lateMin; $("#dlgSet").showModal(); });
+$("#setForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const v={className:$("#stName").value.trim()||"Claude AI",startTime:$("#stStart").value||"09:00",lateMin:Math.max(0,Number($("#stLate").value)||0)};
+  if(await writeSafe(()=>store.setSettings(v))){ S.settings=v; renderHead(); render(); $("#dlgSet").close(); toast("บันทึกการตั้งค่าแล้ว"); }
+});
+$("#btnWipe").addEventListener("click", async ()=>{
+  $("#dlgSet").close();
+  if(!(await confirmBox("ลบรายชื่อทั้งหมด?",`ผู้เรียน ${S.students.length} คนจะถูกลบออกจากรายชื่อ`,"ลบทั้งหมด"))) return;
+  for(const s of [...S.students]){ if(!(await writeSafe(()=>store.delStudent(s.id)))) return; }
+  toast("ลบรายชื่อทั้งหมดแล้ว");
+});
+
+/* ---------- export ---------- */
+function exportRows(){
+  const head=["ลำดับ","รหัส","ชื่อ-นามสกุล","กลุ่ม","อีเมล","วันที่","สถานะ","เวลาเข้าเรียน","สาย (นาที)","ลายเซ็น"];
+  const body=S.students.map((s,i)=>{ const c=S.checkins[s.id]; const lm=c?lateMinutes(c.time):"";
+    return [i+1,s.code||"",s.name,s.group||"",s.email||"",S.date, !c?"ขาด/ยังไม่มา":(isLate(c.time)?"สาย":"มาเรียน"), c?hm(c.time):"", c&&isLate(c.time)?lm:"", c&&c.sig?"มี":""]; });
+  return [head,...body];
+}
+$("#btnCopy").addEventListener("click", async ()=>{
+  const tsv=exportRows().map(r=>r.map(v=>String(v).replace(/[\t\n]/g," ")).join("\t")).join("\n");
+  try{ await navigator.clipboard.writeText(tsv); toast("คัดลอกแล้ว เปิด Google Sheets แล้วกด วาง (Ctrl/⌘+V)"); }
+  catch(e){ toast("คัดลอกไม่ได้ในเบราว์เซอร์นี้"); }
+});
+let downloads=null;
+function plainDownload(name,blob){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
+}
+$("#btnCsv").addEventListener("click", async ()=>{
+  const csv="\uFEFF"+exportRows().map(r=>r.map(v=>{ const s=String(v); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }).join(",")).join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}), name=`attendance-${S.date}.csv`;
+  if(downloads){ try{ await downloads.save({filename:name,data:blob}); }catch(e){ toast("ยกเลิกการดาวน์โหลด"); } }
+  else plainDownload(name,blob);
+});
+
+/* ---------- Google Sheets store (Apps Script web app) ---------- */
+function makeSheetStore(url){
+  const subs={settings:new Set(),students:new Set(),checkins:new Map()};
+  let cache={settings:null,students:[],checkins:{}}, curDate=null, timer=null, firstErr=true;
+  async function pull(){
+    if(!curDate) return;
+    try{
+      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=all&date="+encodeURIComponent(curDate),{redirect:"follow"});
+      const j=await r.json(); if(!j.ok) throw new Error(j.error||"error");
+      cache={settings:j.settings,students:j.students||[],checkins:j.checkins||{}};
+      subs.settings.forEach(f=>f(cache.settings,{fromCache:false}));
+      subs.students.forEach(f=>f(cache.students.slice(),{fromCache:false}));
+      (subs.checkins.get(curDate)||new Set()).forEach(f=>f({...cache.checkins},{fromCache:false}));
+      banner(""); firstErr=true;
+    }catch(e){
+      if(firstErr){ firstErr=false; banner("เชื่อมต่อ Google Sheets ไม่ได้ ตรวจลิงก์ Apps Script ใน CONFIG และสิทธิ์การเข้าถึง (Anyone) แล้วลองใหม่"); }
+      S.loaded=true; render();
+    }
+  }
+  function schedule(){ clearInterval(timer); timer=setInterval(pull,CONFIG.refreshSeconds*1000); }
+  async function post(body){
+    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body),redirect:"follow"});
+    const j=await r.json(); if(!j.ok) throw {code:"unavailable",message:j.error};
+    pull();
+  }
+  return {
+    kind:"sheet",
+    onSettings(cb){ subs.settings.add(cb); return ()=>subs.settings.delete(cb); },
+    onStudents(cb){ subs.students.add(cb); return ()=>subs.students.delete(cb); },
+    onCheckins(date,cb){ curDate=date; if(!subs.checkins.has(date)) subs.checkins.set(date,new Set()); subs.checkins.get(date).add(cb); pull(); schedule(); return ()=>subs.checkins.get(date).delete(cb); },
+    setSettings:v=>post({action:"setSettings",data:v}),
+    setStudent:(id,v)=>post({action:"setStudent",id,data:v}),
+    delStudent:id=>post({action:"delStudent",id}),
+    setCheckin:(date,id,v)=>post({action:"setCheckin",date,id,data:v}),
+    delCheckin:(date,id)=>post({action:"delCheckin",date,id})
+  };
+}
+
+/* ---------- boot ---------- */
+renderHead();
+(async ()=>{
+  let db=null, user=null;
+  const inClaude = !!(window.claude && typeof window.claude.use==="function");
+  try{
+    if(inClaude){
+      loadTimer=setTimeout(()=>{ banner("ยังเชื่อมต่อฐานข้อมูลไม่ได้ กำลังลองใหม่…"); },10000);
+      [db,user,downloads]=await Promise.all([window.claude.use("db"),window.claude.use("user"),window.claude.use("downloads")]);
+    }
+  }catch(e){}
+  if(downloads || !inClaude) $("#btnCsv").hidden=false;
+  if(user){
+    try{ const ce=await user.canEdit(); if(ce!==null && ce!==undefined) S.canEdit=!!ce; }catch(e){}
+    try{ const cw=await user.can("data.write"); if(cw===false){ S.canWrite=false; S.canEdit=false; } }catch(e){}
+  }
+  if(db){ attach(makeDbStore(db)); }
+  else if(CONFIG.googleScriptUrl){
+    clearTimeout(loadTimer);
+    S.canEdit = !CONFIG.adminKey || new URLSearchParams(location.search).get("admin")===CONFIG.adminKey;
+    attach(makeSheetStore(CONFIG.googleScriptUrl));
+  }
+  else{
+    clearTimeout(loadTimer);
+    banner("ยังไม่ได้เชื่อม Google Sheets: ตอนนี้ข้อมูลเก็บไว้ในเบราว์เซอร์เครื่องนี้เท่านั้น ใส่ลิงก์ Apps Script ใน CONFIG ที่ต้นไฟล์ index.html เพื่อบันทึกลงชีต");
+    attach(makeLocalStore());
+  }
+  render();
+})();
+})();
+</script>
+</body>
+</html>
