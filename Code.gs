@@ -1,6 +1,7 @@
 /**
  * Backend สำหรับเว็บเช็คชื่อคลาส Claude AI (Google Apps Script)
  * วิธีใช้: เปิด Google Sheet > ส่วนขยาย > Apps Script > วางโค้ดนี้ > ทำให้ใช้งานได้ (Deploy) เป็น Web app
+ * (โค้ดนี้ผูกกับชีต SHEET_ID ด้านล่างแล้ว จึงสร้างเป็นโปรเจกต์ Apps Script แยกก็ได้)
  *   Execute as: Me | Who has access: Anyone
  * แล้วนำลิงก์ที่ลงท้ายด้วย /exec ไปใส่ใน CONFIG.googleScriptUrl ของ index.html
  *
@@ -8,7 +9,9 @@
  *   Students  : id | name | code | email | group | order
  *   Checkins  : date | studentId | name | code | group | time | timeLocal | status | lateMin | signature
  *   Settings  : key | value
+ * และบันทึกสรุปลงชีต "Data" เดิม (timestamp | name | note) ทุกครั้งที่มีคนลงชื่อ
  */
+const SHEET_ID = '1DL6RvTzvS_l2pfbwxVoSYBlx_3tlNUidzKAe9T5f4ig'; // Google Sheet ที่ใช้เก็บข้อมูล
 const TZ = 'Asia/Bangkok';
 const SHEETS = {
   Students: ['id', 'name', 'code', 'email', 'group', 'order'],
@@ -18,7 +21,7 @@ const SHEETS = {
 const SIG_FOLDER = 'Claude AI Attendance Signatures';
 
 function sheet_(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(SHEET_ID);
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
@@ -75,7 +78,13 @@ function doPost(e) {
       case 'setStudent': upsert_('Students', 'id', b.id, Object.assign({ id: b.id }, b.data)); break;
       case 'delStudent': deleteWhere_('Students', function (r) { return r.id === b.id; }); break;
       case 'setCheckin': setCheckin_(b.date, b.id, b.data); break;
-      case 'delCheckin': deleteWhere_('Checkins', function (r) { return r.date === b.date && r.studentId === b.id; }); break;
+      case 'delCheckin': {
+        const old = rows_('Checkins').filter(function (r) { return r.date === b.date && r.studentId === b.id; })[0];
+        const dataSh = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Data');
+        if (old && dataSh) removeDataRow_(dataSh, b.date, old.name);
+        deleteWhere_('Checkins', function (r) { return r.date === b.date && r.studentId === b.id; });
+        break;
+      }
       default: throw new Error('unknown action');
     }
     return json_({ ok: true });
@@ -89,7 +98,8 @@ function doPost(e) {
 function upsert_(name, keyField, key, obj) {
   const sh = sheet_(name);
   const head = SHEETS[name];
-  const values = head.map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
+  // ใส่ ' นำหน้าข้อความ เพื่อไม่ให้ชีตแปลงเป็นวันที่/ตัวเลขเอง (เช่น 09:00, 001)
+  const values = head.map(function (h) { const v = obj[h]; return v === undefined || v === null ? '' : (typeof v === 'string' && v !== '' ? "'" + v : v); });
   const found = rows_(name).filter(function (r) { return String(r[keyField]) === String(key); })[0];
   if (found) sh.getRange(found._row, 1, 1, head.length).setValues([values]);
   else sh.appendRow(values);
@@ -110,12 +120,30 @@ function setCheckin_(date, id, d) {
   const late = Math.round((t - start) / 60000);
   const isLate = late > Number(s.lateMin || 0);
   deleteWhere_('Checkins', function (r) { return r.date === date && r.studentId === id; });
+  // แถวสรุปในชีต Data (รูปแบบเดิมของชีต: timestamp | name | note)
+  const dataSh = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Data');
+  if (dataSh) {
+    const stamp = Utilities.formatDate(t, TZ, 'dd/MM/yyyy HH:mm');
+    removeDataRow_(dataSh, date, d.name);
+    dataSh.appendRow([stamp, d.name, isLate ? 'สาย' : 'มา']);
+  }
   sheet_('Checkins').appendRow([
-    date, id, d.name, "'" + (d.code || ''), d.group, d.time,
+    "'" + date, "'" + id, d.name, "'" + (d.code || ''), d.group, "'" + d.time,
     Utilities.formatDate(t, TZ, 'HH:mm:ss'),
     isLate ? 'สาย' : 'มาเรียน', isLate ? late : '',
     sigIn_(d.sig, date + '_' + id)
   ]);
+}
+// ลบแถวในชีต Data ของคนนี้ในวันนี้ (กันซ้ำเมื่อเซ็นใหม่ หรือเมื่อกดยกเลิก)
+function removeDataRow_(sh, date, name) {
+  const last = sh.getLastRow();
+  if (last < 2) return;
+  const p = date.split('-'); // yyyy-MM-dd -> dd/MM/yyyy
+  const dayPrefix = p[2] + '/' + p[1] + '/' + p[0];
+  const vals = sh.getRange(2, 1, last - 1, 2).getDisplayValues();
+  for (let i = vals.length - 1; i >= 0; i--) {
+    if (String(vals[i][0]).indexOf(dayPrefix) === 0 && String(vals[i][1]).trim() === String(name).trim()) sh.deleteRow(i + 2);
+  }
 }
 // ลายเซ็น: เก็บในเซลล์ถ้าไม่ยาวเกิน ไม่งั้นบันทึกเป็นไฟล์ PNG ใน Google Drive แล้วเก็บลิงก์
 function sigIn_(dataUrl, name) {
