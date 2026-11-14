@@ -5,7 +5,7 @@
   index.html          หน้าเว็บเช็คชื่อ (เปิดได้เลย)
   xlsx.full.min.js    ตัวอ่านไฟล์ Excel/CSV (วางไว้โฟลเดอร์เดียวกับ index.html)
   Code.gs             โค้ด Google Apps Script สำหรับบันทึกลง Google Sheets
-  students.csv        รายชื่อผู้เรียน 25 คนปัจจุบัน ใช้นำเข้าผ่านปุ่ม "นำเข้า CSV / Excel"
+  students.csv        รายชื่อผู้เรียน 22 คนปัจจุบัน ใช้นำเข้าผ่านปุ่ม "นำเข้า CSV / Excel"
 
 1) ขึ้นเซิร์ฟเวอร์
    อัปโหลด index.html และ xlsx.full.min.js ไว้ในโฟลเดอร์เดียวกัน
