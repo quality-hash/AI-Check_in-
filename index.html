@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="xlsx.full.min.js"></script>
 <script>window.XLSX||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>')</script>
 <style>
@@ -200,6 +201,15 @@ footer.foot a{color:var(--forest)}
 .log .v{font-family:var(--font-display);font-weight:700;color:var(--forest);font-variant-numeric:tabular-nums}
 .log .d{font-size:12px;color:var(--muted)}
 .log li.cur .v::after{content:" ล่าสุด";font-size:11px;font-weight:500;color:var(--good)}
+.auth{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.auth .who-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.8);border:1px solid var(--line);font-size:13px}
+.auth .who-chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good)}
+.login-note{font-size:13px;color:var(--muted);margin-top:8px}
+.sent{display:none;background:var(--good-bg);color:var(--good);border-radius:12px;padding:10px 12px;font-size:14px;margin-top:10px}
+.sent.show{display:block}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.live::before{content:"";width:7px;height:7px;border-radius:50%;background:#b9c4be}
+.live.on::before{background:var(--good);box-shadow:0 0 0 3px rgba(47,138,87,.18)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -211,6 +221,12 @@ footer.foot a{color:var(--forest)}
       <p class="eyebrow">ATTENDANCE · ลงชื่อเข้าเรียน <button class="ver" id="verBtn" type="button" aria-label="ดูประวัติเวอร์ชัน">v-</button></p>
       <h1 id="title">คลาส Claude AI</h1>
       <p class="sub" id="subline">เริ่มเรียน 09:00 น.</p>
+      <div class="auth" id="authBox">
+        <button class="btn sm" id="btnLogin" type="button">เข้าสู่ระบบผู้ดูแล</button>
+        <span class="who-chip" id="whoChip" hidden></span>
+        <button class="btn sm ghost" id="btnLogout" type="button" hidden>ออกจากระบบ</button>
+        <span class="live" id="liveDot">กำลังเชื่อมต่อ…</span>
+      </div>
     </div>
     <div class="hero-right">
     <div class="clock" aria-live="off">
@@ -392,6 +408,23 @@ footer.foot a{color:var(--forest)}
   </form>
 </dialog>
 
+<!-- Login -->
+<dialog id="dlgLogin" aria-labelledby="loginTitle">
+  <form id="loginForm">
+    <div class="dlg-head"><h3 id="loginTitle">เข้าสู่ระบบผู้ดูแล</h3><p>ใส่อีเมลผู้ดูแล ระบบจะส่งลิงก์เข้าสู่ระบบไปที่อีเมลนั้น ไม่ต้องใช้รหัสผ่าน</p></div>
+    <div class="dlg-body">
+      <div class="inp"><label for="loginEmail">อีเมล</label><input id="loginEmail" type="email" autocomplete="email" required placeholder="name@foodlenoodle.com"></div>
+      <div class="sent" id="loginSent">ส่งลิงก์แล้ว เปิดอีเมลแล้วกดลิงก์ “Log In” บนเครื่องนี้ ระบบจะพากลับมาที่หน้านี้และเข้าสู่ระบบให้อัตโนมัติ</div>
+      <div class="err" id="loginErr"></div>
+      <p class="login-note">ผู้เรียนไม่ต้องเข้าสู่ระบบ กดลงชื่อที่ชื่อตัวเองได้เลย</p>
+    </div>
+    <div class="dlg-foot"><div class="right">
+      <button class="btn" type="button" data-close>ปิด</button>
+      <button class="btn primary" type="submit" id="loginBtn">ส่งลิงก์เข้าสู่ระบบ</button>
+    </div></div>
+  </form>
+</dialog>
+
 <!-- Confirm -->
 <dialog id="dlgConfirm" aria-labelledby="cfTitle">
   <form method="dialog">
@@ -407,21 +440,17 @@ footer.foot a{color:var(--forest)}
 
 <script>
 /* ===================== CONFIG =====================
-   googleScriptUrl : ลิงก์ Web app ของ Google Apps Script (ลงท้าย /exec) ถ้าเว้นว่าง ข้อมูลจะเก็บในเบราว์เซอร์เครื่องนั้นเท่านั้น
-   adminKey        : ถ้าใส่ ปุ่มจัดการ (นำเข้า/เพิ่ม/ลบ/ตั้งค่า/ยกเลิก) จะแสดงเฉพาะเมื่อเปิดด้วย ?admin=<รหัสนี้>
-                     (ซ่อนปุ่มเท่านั้น ไม่ใช่ระบบความปลอดภัย)
-   refreshSeconds  : ดึงข้อมูลใหม่จากชีตทุกกี่วินาที
-   githubUrl       : ลิงก์ repo บน GitHub (ไม่บังคับ)
+   supabaseUrl / supabaseKey : โปรเจกต์ Supabase (คีย์นี้เป็นคีย์สาธารณะสำหรับหน้าเว็บ สิทธิ์ถูกคุมด้วย RLS ในฐานข้อมูล)
+   githubUrl                 : ลิงก์ repo บน GitHub (แสดงท้ายเว็บ)
    ================================================== */
 const CONFIG = {
-  googleScriptUrl: "https://script.google.com/macros/s/AKfycbxRiwLLxzJeDmOt9UDnEBstzZwidutFNRMX-8TaQmd1a3KNG8KAhrWYyOpQSrCJoo8ffQ/exec",
-  adminKey: "",
-  refreshSeconds: 15,
-  githubUrl: "https://github.com/quality-hash/AI-Check_in-"   // เช่น "https://github.com/ชื่อบัญชี/claude-ai-attendance" จะแสดงลิงก์ที่ท้ายเว็บ
+  supabaseUrl: "https://ohzoiatahkhjieinsita.supabase.co",
+  supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oem9pYXRhaGtoamllaW5zaXRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUyMjQ3NzMsImV4cCI6MjExMDgwMDc3M30.nCJfFQ9_r8OX74n70xjiFd5FK-8oYG47Ayd4ixbkFgo",
+  githubUrl: "https://github.com/quality-hash/AI-Check_in-"
 };
-const APP_VERSION="1.8.0";
-const APP_UPDATED="2026-11-14";
-const CHANGELOG=[{"v": "1.8.0", "d": "2026-11-14", "t": "เชื่อม Google Sheet ของคลาส: บันทึกการลงชื่อลงชีต Data และทุกเครื่องเห็นข้อมูลเดียวกัน"}, {"v": "1.7.0", "d": "2026-11-14", "t": "แสดงเวอร์ชันบนเว็บและประวัติการอัปเดต, เตรียมไฟล์สำหรับ GitHub Pages"}, {"v": "1.6.0", "d": "2026-11-14", "t": "พื้นหลังฟ้าไล่ขาว, รายชื่อเป็นการ์ด 2 ช่องต่อแถว"}, {"v": "1.5.0", "d": "2026-11-14", "t": "พื้นหลังลายผีเสื้อ"}, {"v": "1.4.0", "d": "2026-11-14", "t": "ไอคอนหมีเล็กข้างรายชื่อ พร้อมป้ายติ๊กเมื่อลงชื่อ"}, {"v": "1.3.0", "d": "2026-11-14", "t": "ธีมชมพู-ส้ม และน้องหมีที่หัวเว็บ"}, {"v": "1.2.0", "d": "2026-11-14", "t": "เวอร์ชันขึ้นเซิร์ฟเวอร์เอง เชื่อม Google Sheets ผ่าน Apps Script"}, {"v": "1.1.0", "d": "2026-11-14", "t": "เพิ่มรายชื่อผู้เรียน และลบชื่อที่ซ้ำ"}, {"v": "1.0.0", "d": "2026-11-14", "t": "เปิดใช้งานครั้งแรก: ลงชื่อ เซ็นชื่อ บันทึกเวลา นำเข้า CSV/Excel"}];
+const APP_VERSION="2.0.0";
+const APP_UPDATED="2026-11-21";
+const CHANGELOG=[{"v": "2.0.0", "d": "2026-11-21", "t": "ย้ายฐานข้อมูลไป Supabase, หน้าเข้าสู่ระบบผู้ดูแลด้วยอีเมล, อัปเดตทันทีทุกเครื่อง (realtime), ซ่อนอีเมลและลายเซ็นจากคนที่ไม่ได้เข้าสู่ระบบ"}, {"v": "1.8.0", "d": "2026-11-14", "t": "เชื่อม Google Sheet ของคลาส: บันทึกการลงชื่อลงชีต Data และทุกเครื่องเห็นข้อมูลเดียวกัน"}, {"v": "1.7.0", "d": "2026-11-14", "t": "แสดงเวอร์ชันบนเว็บและประวัติการอัปเดต, เตรียมไฟล์สำหรับ GitHub Pages"}, {"v": "1.6.0", "d": "2026-11-14", "t": "พื้นหลังฟ้าไล่ขาว, รายชื่อเป็นการ์ด 2 ช่องต่อแถว"}, {"v": "1.5.0", "d": "2026-11-14", "t": "พื้นหลังลายผีเสื้อ"}, {"v": "1.4.0", "d": "2026-11-14", "t": "ไอคอนหมีเล็กข้างรายชื่อ พร้อมป้ายติ๊กเมื่อลงชื่อ"}, {"v": "1.3.0", "d": "2026-11-14", "t": "ธีมชมพู-ส้ม และน้องหมีที่หัวเว็บ"}, {"v": "1.2.0", "d": "2026-11-14", "t": "เวอร์ชันขึ้นเซิร์ฟเวอร์เอง เชื่อม Google Sheets ผ่าน Apps Script"}, {"v": "1.1.0", "d": "2026-11-14", "t": "เพิ่มรายชื่อผู้เรียน และลบชื่อที่ซ้ำ"}, {"v": "1.0.0", "d": "2026-11-14", "t": "เปิดใช้งานครั้งแรก: ลงชื่อ เซ็นชื่อ บันทึกเวลา นำเข้า CSV/Excel"}];
 
 (function(){
 "use strict";
@@ -442,40 +471,80 @@ const thDate = key => new Date(key+"T12:00:00+07:00").toLocaleDateString("th-TH"
 const S = {
   settings:{className:"Claude AI",startTime:"09:00",lateMin:15},
   students:[], checkins:{}, date:todayKey(), filter:"all", q:"",
-  canEdit:true, canWrite:true, loaded:false
+  canEdit:false, canWrite:true, loaded:false, isAdmin:false
 };
 
-/* ---------- store adapters ---------- */
-function makeLocalStore(){
-  const KEY="claude-ai-attendance-v1"; let mem;
-  try{ mem = JSON.parse(localStorage.getItem(KEY)||"null"); }catch(e){}
-  mem = mem || {settings:null,students:{},sessions:{}};
-  const subs = new Set();
-  const save = () => { try{ localStorage.setItem(KEY,JSON.stringify(mem)); }catch(e){} subs.forEach(f=>f()); };
-  return {
-    kind:"local",
-    onSettings(cb){ const f=()=>cb(mem.settings); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
-    onStudents(cb){ const f=()=>cb(Object.entries(mem.students).map(([id,v])=>({id,...v}))); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
-    onCheckins(date,cb){ const f=()=>cb({...(mem.sessions[date]||{})}); subs.add(f); setTimeout(f); return ()=>subs.delete(f); },
-    async setSettings(v){ mem.settings=v; save(); },
-    async setStudent(id,v){ mem.students[id]=v; save(); },
-    async delStudent(id){ delete mem.students[id]; save(); },
-    async setCheckin(date,id,v){ (mem.sessions[date] ||= {})[id]=v; save(); },
-    async delCheckin(date,id){ if(mem.sessions[date]) delete mem.sessions[date][id]; save(); }
-  };
+/* ---------- Supabase store ---------- */
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function sbErr(error){
+  if(!error) return null;
+  const c=String(error.code||"");
+  if(c==="42501"||/row-level security|permission/i.test(error.message||"")) return {code:"invalid_argument",message:error.message};
+  if(c==="23505") return {code:"duplicate",message:error.message};
+  return {code:"unavailable",message:error.message||String(error)};
 }
-function makeDbStore(db){
-  const snapList = cb => snap => cb(snap.docs.map(d=>({id:d.id,...d.data()})), snap.metadata);
+function makeSupabaseStore(sb){
+  const subs={settings:new Set(),students:new Set(),checkins:new Set()};
+  let curDate=null, timer=null, channel=null;
+  async function load(){
+    const admin=S.isAdmin;
+    const [st,stu,chk]=await Promise.all([
+      sb.from("settings").select("class_name,start_time,late_min").eq("id",1).maybeSingle(),
+      sb.from("students").select("id,name,code,group_name,sort_order").order("sort_order").order("name"),
+      curDate?sb.from("checkins").select("id,student_id,checked_at").eq("session_date",curDate):Promise.resolve({data:[]})
+    ]);
+    const e=st.error||stu.error||chk.error; if(e) throw e;
+    let contacts={}, sigs={};
+    if(admin){
+      const ids=(chk.data||[]).map(c=>c.id);
+      const [ct,sg]=await Promise.all([
+        sb.from("student_contacts").select("student_id,email"),
+        ids.length?sb.from("checkin_signatures").select("checkin_id,signature").in("checkin_id",ids):Promise.resolve({data:[]})
+      ]);
+      (ct.data||[]).forEach(r=>contacts[r.student_id]=r.email);
+      (sg.data||[]).forEach(r=>sigs[r.checkin_id]=r.signature);
+    }
+    if(st.data) subs.settings.forEach(f=>f({className:st.data.class_name,startTime:String(st.data.start_time).slice(0,5),lateMin:st.data.late_min},{fromCache:false}));
+    const list=(stu.data||[]).map(r=>({id:r.id,name:r.name,code:r.code,group:r.group_name,order:r.sort_order,email:contacts[r.id]||""}));
+    subs.students.forEach(f=>f(list,{fromCache:false}));
+    const o={}; (chk.data||[]).forEach(c=>o[c.student_id]={checkinId:c.id,time:c.checked_at,sig:sigs[c.id]||""});
+    subs.checkins.forEach(f=>f(o,{fromCache:false}));
+  }
+  const reload=()=>{ clearTimeout(timer); timer=setTimeout(()=>load().then(()=>{banner("");}).catch(err=>{ banner("โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง"); }),250); };
+  function listen(){
+    if(channel) sb.removeChannel(channel);
+    setInterval(reload,30000); // สำรอง ถ้า realtime หลุด
+
+    channel=sb.channel("attendance")
+      .on("postgres_changes",{event:"*",schema:"public",table:"checkins"},reload)
+      .on("postgres_changes",{event:"*",schema:"public",table:"students"},reload)
+      .on("postgres_changes",{event:"*",schema:"public",table:"settings"},reload)
+      .on("postgres_changes",{event:"*",schema:"public",table:"checkin_signatures"},reload)
+      .subscribe(status=>{ const d=$("#liveDot"); const on=status==="SUBSCRIBED"; d.classList.toggle("on",on); d.textContent=on?"อัปเดตอัตโนมัติ":"กำลังเชื่อมต่อ…"; });
+  }
+  async function run(q){ const {error}=await q; const e=sbErr(error); if(e) throw e; }
   return {
-    kind:"db",
-    onSettings(cb,err){ return db.doc("settings/main").onSnapshot(s=>cb(s.exists?s.data():null,s.metadata),err); },
-    onStudents(cb,err){ return db.collection("students").onSnapshot(snapList(cb),err); },
-    onCheckins(date,cb,err){ return db.collection(`sessions/${date}/checkins`).onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); cb(o,s.metadata); },err); },
-    setSettings:v=>db.doc("settings/main").set(v),
-    setStudent:(id,v)=>db.doc("students/"+id).set(v),
-    delStudent:id=>db.doc("students/"+id).delete(),
-    setCheckin:(date,id,v)=>db.doc(`sessions/${date}/checkins/${id}`).set(v),
-    delCheckin:(date,id)=>db.doc(`sessions/${date}/checkins/${id}`).delete()
+    kind:"supabase", reload, listen,
+    onSettings(cb){ subs.settings.add(cb); return ()=>subs.settings.delete(cb); },
+    onStudents(cb){ subs.students.add(cb); return ()=>subs.students.delete(cb); },
+    onCheckins(date,cb){ curDate=date; subs.checkins.clear(); subs.checkins.add(cb); reload(); return ()=>subs.checkins.delete(cb); },
+    setSettings:v=>run(sb.from("settings").update({class_name:v.className,start_time:v.startTime,late_min:v.lateMin,updated_at:new Date().toISOString()}).eq("id",1)),
+    async setStudent(id,v){
+      const row={name:v.name,code:v.code||"",group_name:v.group||"",sort_order:v.order||0};
+      let sid=id;
+      if(UUID_RE.test(id)) await run(sb.from("students").update(row).eq("id",id));
+      else { const {data,error}=await sb.from("students").insert(row).select("id").single(); const e=sbErr(error); if(e) throw e; sid=data.id; }
+      if(v.email) await run(sb.from("student_contacts").upsert({student_id:sid,email:v.email}));
+      reload();
+    },
+    async delStudent(id){ await run(sb.from("students").delete().eq("id",id)); reload(); },
+    async setCheckin(date,id,v){
+      const {data,error}=await sb.from("checkins").insert({student_id:id}).select("id").single();
+      const e=sbErr(error); if(e) throw e;
+      if(v.sig){ const r=await sb.from("checkin_signatures").insert({checkin_id:data.id,signature:v.sig}); if(r.error) console.warn(r.error); }
+      reload();
+    },
+    async delCheckin(date,id){ await run(sb.from("checkins").delete().eq("student_id",id).eq("session_date",date)); reload(); }
   };
 }
 
@@ -542,7 +611,8 @@ async function writeSafe(fn,failMsg){
   try{ await fn(); return true; }
   catch(e){
     if(e && e.code==="unavailable"){ await new Promise(r=>setTimeout(r,600+Math.random()*600)); try{ await fn(); return true; }catch(e2){ e=e2; } }
-    if(e && e.code==="invalid_argument"){ S.canWrite=false; render(); toast("บัญชีนี้ไม่มีสิทธิ์บันทึกข้อมูล ขอสิทธิ์ Contributor จากเจ้าของหน้า"); }
+    if(e && e.code==="duplicate"){ toast("รายชื่อนี้ลงชื่อของวันนี้ไปแล้ว"); }
+    else if(e && e.code==="invalid_argument"){ toast("ต้องเข้าสู่ระบบผู้ดูแลก่อนจึงจะทำรายการนี้ได้"); }
     else if(e && e.code==="quota_exceeded"){ toast("พื้นที่เก็บข้อมูลเต็ม ลบรายชื่อหรือข้อมูลเก่าออกก่อน"); }
     else toast(failMsg || "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
     return false;
@@ -581,7 +651,7 @@ function render(){
     const meta=[s.code&&("รหัส "+s.code), s.group].filter(Boolean).map(esc).join(" · ");
     const status = !c ? `<span class="pill wait">ยังไม่ลงชื่อ</span>`
       : late ? `<span class="pill late">สาย ${lm} นาที</span>` : `<span class="pill ok">ตรงเวลา</span>`;
-    const sig = c && c.sig ? `<button class="sig-thumb" data-view="${esc(s.id)}" aria-label="ดูลายเซ็นของ ${esc(s.name)}"><img src="${esc(c.sig)}" alt=""></button>`
+    const sig = !S.isAdmin ? (c?`<div class="sig-thumb empty">เซ็นแล้ว</div>`:`<div class="sig-thumb empty">—</div>`) : c && c.sig ? `<button class="sig-thumb" data-view="${esc(s.id)}" aria-label="ดูลายเซ็นของ ${esc(s.name)}"><img src="${esc(c.sig)}" alt=""></button>`
       : `<div class="sig-thumb empty">${c?"ไม่มีลายเซ็น":"—"}</div>`;
     const act = !c
       ? `<button class="btn primary sm" data-sign="${esc(s.id)}" ${S.canWrite?"":"disabled"}>ลงชื่อ</button>`
@@ -600,7 +670,7 @@ function render(){
 /* ---------- events: list ---------- */
 $("#list").addEventListener("click", async e=>{
   const b=e.target.closest("button"); if(!b) return;
-  if(b.dataset.sign) openSign(b.dataset.sign);
+  if(b.dataset.sign){ if(S.date!==todayKey() && !S.isAdmin){ toast("ลงชื่อได้เฉพาะวันนี้ เปลี่ยนวันที่กลับเป็นวันนี้ก่อน"); return; } openSign(b.dataset.sign); }
   else if(b.dataset.view){
     const s=S.students.find(x=>x.id===b.dataset.view), c=S.checkins[b.dataset.view]; if(!s||!c) return;
     $("#viewTitle").textContent="ลายเซ็นของ "+s.name; $("#viewMeta").textContent=`ลงชื่อเวลา ${hm(c.time)} น. · ${thDate(S.date)}`;
@@ -789,44 +859,6 @@ $("#btnCsv").addEventListener("click", async ()=>{
   else plainDownload(name,blob);
 });
 
-/* ---------- Google Sheets store (Apps Script web app) ---------- */
-function makeSheetStore(url){
-  const subs={settings:new Set(),students:new Set(),checkins:new Map()};
-  let cache={settings:null,students:[],checkins:{}}, curDate=null, timer=null, firstErr=true;
-  async function pull(){
-    if(!curDate) return;
-    try{
-      const r=await fetch(url+(url.includes("?")?"&":"?")+"action=all&date="+encodeURIComponent(curDate),{redirect:"follow"});
-      const j=await r.json(); if(!j.ok) throw new Error(j.error||"error");
-      cache={settings:j.settings,students:j.students||[],checkins:j.checkins||{}};
-      subs.settings.forEach(f=>f(cache.settings,{fromCache:false}));
-      subs.students.forEach(f=>f(cache.students.slice(),{fromCache:false}));
-      (subs.checkins.get(curDate)||new Set()).forEach(f=>f({...cache.checkins},{fromCache:false}));
-      banner(""); firstErr=true;
-    }catch(e){
-      if(firstErr){ firstErr=false; banner("เชื่อมต่อ Google Sheets ไม่ได้ ตรวจลิงก์ Apps Script ใน CONFIG และสิทธิ์การเข้าถึง (Anyone) แล้วลองใหม่"); }
-      S.loaded=true; render();
-    }
-  }
-  function schedule(){ clearInterval(timer); timer=setInterval(pull,CONFIG.refreshSeconds*1000); }
-  async function post(body){
-    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body),redirect:"follow"});
-    const j=await r.json(); if(!j.ok) throw {code:"unavailable",message:j.error};
-    pull();
-  }
-  return {
-    kind:"sheet",
-    onSettings(cb){ subs.settings.add(cb); return ()=>subs.settings.delete(cb); },
-    onStudents(cb){ subs.students.add(cb); return ()=>subs.students.delete(cb); },
-    onCheckins(date,cb){ curDate=date; if(!subs.checkins.has(date)) subs.checkins.set(date,new Set()); subs.checkins.get(date).add(cb); pull(); schedule(); return ()=>subs.checkins.get(date).delete(cb); },
-    setSettings:v=>post({action:"setSettings",data:v}),
-    setStudent:(id,v)=>post({action:"setStudent",id,data:v}),
-    delStudent:id=>post({action:"delStudent",id}),
-    setCheckin:(date,id,v)=>post({action:"setCheckin",date,id,data:v}),
-    delCheckin:(date,id)=>post({action:"delCheckin",date,id})
-  };
-}
-
 /* ---------- version ---------- */
 (function(){
   $("#verBtn").textContent="v"+APP_VERSION;
@@ -839,33 +871,48 @@ function makeSheetStore(url){
   $("#verBtn").addEventListener("click",()=>$("#dlgVer").showModal());
 })();
 
+/* ---------- auth ---------- */
+let sb=null;
+function renderAuth(session){
+  const email=session&&session.user&&session.user.email||"";
+  $("#btnLogin").hidden=!!email;
+  $("#btnLogout").hidden=!email;
+  const chip=$("#whoChip"); chip.hidden=!email;
+  chip.textContent=email?(S.isAdmin?"ผู้ดูแล: ":"เข้าสู่ระบบ: ")+email:"";
+}
+async function refreshAdmin(session){
+  S.isAdmin=false;
+  if(session){ const {data}=await sb.rpc("am_i_admin"); S.isAdmin=data===true; }
+  S.canEdit=S.isAdmin;
+  renderAuth(session);
+  if(session && !S.isAdmin) toast("อีเมลนี้ไม่ใช่ผู้ดูแล จึงลงชื่อได้อย่างเดียว");
+  render(); if(store) store.reload();
+}
+$("#btnLogin").addEventListener("click",()=>{ $("#loginSent").classList.remove("show"); $("#loginErr").textContent=""; $("#dlgLogin").showModal(); });
+$("#loginForm").addEventListener("submit",async e=>{
+  e.preventDefault(); if(!sb) return;
+  const email=$("#loginEmail").value.trim(); const btn=$("#loginBtn"); btn.disabled=true; $("#loginErr").textContent="";
+  const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
+  btn.disabled=false;
+  if(error){ $("#loginErr").textContent=/rate|seconds/i.test(error.message)?"ส่งถี่เกินไป รอสักครู่แล้วลองใหม่":"ส่งลิงก์ไม่สำเร็จ: "+error.message; return; }
+  $("#loginSent").classList.add("show");
+});
+$("#btnLogout").addEventListener("click",async()=>{ await sb.auth.signOut(); toast("ออกจากระบบแล้ว"); });
+
 /* ---------- boot ---------- */
 renderHead();
 (async ()=>{
-  let db=null, user=null;
-  const inClaude = !!(window.claude && typeof window.claude.use==="function");
-  try{
-    if(inClaude){
-      loadTimer=setTimeout(()=>{ banner("ยังเชื่อมต่อฐานข้อมูลไม่ได้ กำลังลองใหม่…"); },10000);
-      [db,user,downloads]=await Promise.all([window.claude.use("db"),window.claude.use("user"),window.claude.use("downloads")]);
-    }
-  }catch(e){}
-  if(downloads || !inClaude) $("#btnCsv").hidden=false;
-  if(user){
-    try{ const ce=await user.canEdit(); if(ce!==null && ce!==undefined) S.canEdit=!!ce; }catch(e){}
-    try{ const cw=await user.can("data.write"); if(cw===false){ S.canWrite=false; S.canEdit=false; } }catch(e){}
+  if(!window.supabase || !CONFIG.supabaseUrl){
+    banner("โหลดระบบฐานข้อมูลไม่สำเร็จ ตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วรีเฟรชหน้า"); S.loaded=true; render(); return;
   }
-  if(db){ attach(makeDbStore(db)); }
-  else if(CONFIG.googleScriptUrl){
-    clearTimeout(loadTimer);
-    S.canEdit = !CONFIG.adminKey || new URLSearchParams(location.search).get("admin")===CONFIG.adminKey;
-    attach(makeSheetStore(CONFIG.googleScriptUrl));
-  }
-  else{
-    clearTimeout(loadTimer);
-    banner("ยังไม่ได้เชื่อม Google Sheets: ตอนนี้ข้อมูลเก็บไว้ในเบราว์เซอร์เครื่องนี้เท่านั้น ใส่ลิงก์ Apps Script ใน CONFIG ที่ต้นไฟล์ index.html เพื่อบันทึกลงชีต");
-    attach(makeLocalStore());
-  }
+  $("#btnCsv").hidden=false;
+  sb=window.supabase.createClient(CONFIG.supabaseUrl,CONFIG.supabaseKey,{auth:{persistSession:true,detectSessionInUrl:true,flowType:"implicit"}});
+  const {data:{session}}=await sb.auth.getSession();
+  await refreshAdmin(session);
+  sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"||ev==="SIGNED_OUT"){ refreshAdmin(sess); if(ev==="SIGNED_IN") { $("#dlgLogin").open&&$("#dlgLogin").close(); history.replaceState(null,"",location.pathname); } } });
+  store=makeSupabaseStore(sb);
+  attach(store);
+  store.listen();
   render();
 })();
 })();
